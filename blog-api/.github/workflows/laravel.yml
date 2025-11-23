@@ -1,0 +1,64 @@
+name: Laravel CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, xml, ctype, iconv, intl, sqlite, pdo_sqlite
+        coverage: xdebug
+    
+    - name: Cache Composer packages
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+    
+    - name: Install Dependencies
+      run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+    
+    - name: Copy Environment File
+      run: cp .env.example .env
+    
+    - name: Generate Key
+      run: php artisan key:generate
+    
+    - name: Setup Test Environment
+      run: |
+        echo "APP_DEBUG=true" >> .env
+        echo "DB_CONNECTION=sqlite" >> .env
+        echo "DB_DATABASE=:memory:" >> .env
+        echo "CACHE_DRIVER=array" >> .env
+        echo "QUEUE_CONNECTION=sync" >> .env
+    
+    - name: Run Migrations
+      run: php artisan migrate --force
+    
+    - name: Run Security Audit
+      run: composer audit
+    
+    - name: Execute Tests
+      run: php artisan test --coverage-clover=coverage.xml --log-junit junit.xml
+    
+    - name: Upload Coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: |
+          junit.xml
+          coverage.xml
+        retention-days: 30
