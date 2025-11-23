@@ -19,7 +19,6 @@ class PostResource extends JsonResource
             'author' => [
                 'id' => $this->user->id,
                 'name' => $this->user->name,
-                'email' => $this->user->email
             ],
             'links' => [
                 'self' => '/api/posts/' . $this->id, 

@@ -17,36 +17,72 @@ class PostController extends Controller
      */
     public function index(Request $request)
     {
-        $cacheKey = 'posts.' . md5(serialize($request->all()));
+        $cacheKey = $this->generateSafeCacheKey($request);
         
         $posts = Cache::remember($cacheKey, 60, function() use ($request) {
             $query = Post::with('user');
             
-            // Search/filter
-            if ($request->has('search')) {
-                $query->where(function($q) use ($request) {
-                    $q->where('title', 'like', '%' . $request->search . '%')
-                    ->orWhere('content', 'like', '%' . $request->search . '%');
-                });
+            if ($request->filled('search')) {
+                $searchTerm = $request->input('search');
+            
+                $query->where('title', 'LIKE', "%{$searchTerm}%")
+                ->orWhere('content', 'LIKE', "%{$searchTerm}%");
             }
             
-            // Filter by user
-            if ($request->has('user_id')) {
+            if ($request->filled('user_id')) {
                 $query->where('user_id', $request->user_id);
             }
             
-            // Sort
-            $sort = $request->get('sort', 'created_at');
-            $direction = $request->get('direction', 'desc');
+            $allowedSorts = ['created_at', 'title', 'updated_at'];
+            $sort = in_array($request->get('sort'), $allowedSorts) 
+                ? $request->get('sort') 
+                : 'created_at';
+                
+            $direction = in_array(strtolower($request->get('direction')), ['asc', 'desc']) 
+                ? $request->get('direction') 
+                : 'desc';
             
-            // Validate sort direction
-            $direction = in_array(strtolower($direction), ['asc', 'desc']) ? $direction : 'desc';
+            $perPage = min($request->get('per_page', 10), 100); 
             
             return $query->orderBy($sort, $direction)
-                        ->paginate($request->get('per_page', 10));
+                        ->paginate($perPage);
         });
     
         return new PostCollection($posts);
+    }
+
+    /**
+     * Generate safe cache key
+     */
+    private function generateSafeCacheKey(Request $request): string
+    {
+        $allowedParams = ['search', 'user_id', 'sort', 'direction', 'per_page', 'page'];
+        
+        $normalizedParams = [];
+        
+        foreach ($allowedParams as $param) {
+            if ($request->has($param)) {
+                $value = $request->input($param);
+                
+                if (is_string($value)) {
+                    $value = substr($value, 0, 50); 
+                }
+                
+                $normalizedParams[$param] = $value;
+            }
+        }
+        
+        if (empty($normalizedParams)) {
+            return 'posts.default';
+        }
+        
+        $serialized = serialize($normalizedParams);
+        
+        if (strlen($serialized) > 1000) {
+            return 'posts.large_query_' . md5($serialized);
+        }
+        
+        return 'posts.' . md5($serialized);
     }
 
     /**
@@ -54,12 +90,8 @@ class PostController extends Controller
      */
     public function store(StorePostRequest $request)
     {
-        $post = Post::create([
-            'title' => $request->title,
-            'content' => $request->content,
-            'user_id' => auth('sanctum')->id(),
-        ]);
-        
+        $post = $request->user()->posts()->create($request->validated());
+    
         return new PostResource($post->load('user'));
     }
 

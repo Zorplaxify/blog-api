@@ -45,4 +45,29 @@ class PostTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    #[Test]
+    public function test_mass_assignment_protection()
+    {
+        $user = User::factory()->create(['email' => 'user' . uniqid() . '@example.com']);
+        $attacker = User::factory()->create(['email' => 'attacker' . uniqid() . '@example.com']);
+        
+        $token = $attacker->createToken('test-token')->plainTextToken;
+        
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token
+        ])->postJson('/api/posts', [
+            'title' => 'Hacked Post',
+            'content' => 'Safe content',
+            'user_id' => $user->id, 
+        ]);
+        
+        $response->assertStatus(422)
+                ->assertJsonValidationErrors(['user_id']);
+        
+        $this->assertDatabaseMissing('posts', [
+            'user_id' => $user->id,
+            'title' => 'Hacked Post'
+        ]);
+    }
 }

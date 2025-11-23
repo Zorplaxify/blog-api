@@ -18,6 +18,8 @@
         </include>
     </source>
     <php>
+        <env name="PASSWORD_DEFAULT_TIMEOUT" value="0"/>
+        <env name="PASSWORD_DEFAULT_NOT_PWNED_VERIFIER" value="false"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
